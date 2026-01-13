@@ -2,8 +2,6 @@ package com.aichatbot.mixin;
 
 import com.aichatbot.OpenAIHandler;
 import net.minecraft.client.gui.hud.ChatHud;
-import net.minecraft.client.gui.hud.MessageIndicator;
-import net.minecraft.network.message.MessageSignatureData;
 import net.minecraft.text.Text;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -17,9 +15,8 @@ import java.util.regex.Pattern;
 public class ChatMixin {
     private static final Pattern CHAT_PATTERN = Pattern.compile("<([^>]+)>\\s*(.+)");
 
-    @Inject(method = "addMessage(Lnet/minecraft/text/Text;Lnet/minecraft/network/message/MessageSignatureData;Lnet/minecraft/client/gui/hud/MessageIndicator;)V", at = @At("HEAD"))
-    private void onChatMessage(Text message, MessageSignatureData signature, MessageIndicator indicator,
-            CallbackInfo ci) {
+    @Inject(method = "addMessage(Lnet/minecraft/text/Text;)V", at = @At("HEAD"))
+    private void onChatMessage(Text message, CallbackInfo ci) {
         try {
             String raw = message.getString();
             Matcher matcher = CHAT_PATTERN.matcher(raw);
@@ -29,8 +26,7 @@ public class ChatMixin {
                 String chatMessage = matcher.group(2);
                 OpenAIHandler.handleMessage(playerName, chatMessage);
             }
-        } catch (Exception e) {
-            e.printStackTrace();
+        } catch (Exception ignored) {
         }
     }
 }

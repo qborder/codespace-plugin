@@ -95,13 +95,10 @@ public class OpenAIHandler {
 
     private static void sendChat(String message) {
         MinecraftClient client = MinecraftClient.getInstance();
-        if (client.player != null && client.getNetworkHandler() != null) {
+        if (client.player != null && client.player.networkHandler != null) {
             client.execute(() -> {
-                if (message.length() > 256) {
-                    client.getNetworkHandler().sendChatMessage(message.substring(0, 253) + "...");
-                } else {
-                    client.getNetworkHandler().sendChatMessage(message);
-                }
+                String toSend = message.length() > 256 ? message.substring(0, 253) + "..." : message;
+                client.player.networkHandler.sendChatMessage(toSend);
             });
         }
     }

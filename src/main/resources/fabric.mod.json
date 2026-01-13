@@ -3,7 +3,7 @@
     "id": "aichatbot",
     "version": "${version}",
     "name": "AI Chatbot",
-    "description": "Responds to !ai messages in chat using OpenAI",
+    "description": "Responds to !ai messages in chat using AI",
     "authors": ["qborder"],
     "contact": {},
     "license": "MIT",

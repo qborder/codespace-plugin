@@ -1,0 +1,9 @@
+{
+    "required": true,
+    "package": "com.aichatbot.mixin",
+    "compatibilityLevel": "JAVA_21",
+    "client": ["ChatMixin"],
+    "injectors": {
+        "defaultRequire": 1
+    }
+}

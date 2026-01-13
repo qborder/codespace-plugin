@@ -4,6 +4,8 @@ import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.network.ClientPlayerEntity;
+import net.minecraft.util.math.BlockPos;
 
 import java.net.URI;
 import java.net.http.*;
@@ -16,11 +18,13 @@ public class OpenAIHandler {
     private static long lastRequest = 0;
 
     public static void handleMessage(String playerName, String query) {
-        AIChatbotClient.LOGGER.info("[AICHAT] Processing query from " + playerName + ": " + query);
+        if (!Config.enabled)
+            return;
+
+        AIChatbotClient.LOGGER.info("[AICHAT] Query from " + playerName + ": " + query);
 
         long now = System.currentTimeMillis();
         if (now - lastRequest < Config.cooldownMs) {
-            AIChatbotClient.LOGGER.info("[AICHAT] Cooldown active");
             return;
         }
         lastRequest = now;
@@ -32,20 +36,65 @@ public class OpenAIHandler {
 
         CompletableFuture.runAsync(() -> {
             try {
-                AIChatbotClient.LOGGER.info("[AICHAT] Calling API...");
                 String response = callAPI(playerName, query);
-                AIChatbotClient.LOGGER.info("[AICHAT] Got response: " + response);
                 if (response != null && !response.isEmpty()) {
-                    sendChat(response);
+                    String cleaned = sanitizeForMinecraft(response);
+                    String finalMsg = Config.responsePrefix + " " + cleaned;
+                    sendChat(finalMsg);
                 }
             } catch (Exception e) {
                 AIChatbotClient.LOGGER.error("[AICHAT] API failed", e);
-                sendChat("Error: " + e.getMessage());
             }
         });
     }
 
+    private static String sanitizeForMinecraft(String input) {
+        StringBuilder sb = new StringBuilder();
+        for (char c : input.toCharArray()) {
+            if (c >= 32 && c <= 126) {
+                sb.append(c);
+            } else if (c == '\n' || c == '\r') {
+                sb.append(' ');
+            }
+        }
+
+        String result = sb.toString()
+                .replace("\"", "'")
+                .replace("\\", "/")
+                .replaceAll("\\s+", " ")
+                .trim();
+
+        return result;
+    }
+
     private static String callAPI(String playerName, String query) throws Exception {
+        MinecraftClient mc = MinecraftClient.getInstance();
+        ClientPlayerEntity player = mc.player;
+
+        StringBuilder contextBuilder = new StringBuilder();
+        contextBuilder.append(Config.systemPrompt);
+
+        if (player != null) {
+            contextBuilder.append("\n\n--- MINECRAFT CONTEXT ---");
+
+            if (Config.includePlayerInfo) {
+                contextBuilder.append("\nYour username: ").append(player.getName().getString());
+                contextBuilder.append("\nAsking player: ").append(playerName);
+                contextBuilder.append("\nHealth: ").append((int) player.getHealth()).append("/20");
+                contextBuilder.append("\nHunger: ").append(player.getHungerManager().getFoodLevel()).append("/20");
+            }
+
+            if (Config.includeCoords) {
+                BlockPos pos = player.getBlockPos();
+                contextBuilder.append("\nYour coordinates: X=").append(pos.getX())
+                        .append(" Y=").append(pos.getY())
+                        .append(" Z=").append(pos.getZ());
+                contextBuilder.append("\nDimension: ").append(player.getWorld().getRegistryKey().getValue().toString());
+            }
+
+            contextBuilder.append("\n--- END CONTEXT ---");
+        }
+
         JsonObject body = new JsonObject();
         body.addProperty("provider", Config.provider);
         body.addProperty("model", Config.model);
@@ -60,12 +109,12 @@ public class OpenAIHandler {
 
         JsonObject sys = new JsonObject();
         sys.addProperty("role", "system");
-        sys.addProperty("content", Config.systemPrompt);
+        sys.addProperty("content", contextBuilder.toString());
         messages.add(sys);
 
         JsonObject user = new JsonObject();
         user.addProperty("role", "user");
-        user.addProperty("content", playerName + " asks: " + query);
+        user.addProperty("content", playerName + ": " + query);
         messages.add(user);
 
         body.add("messages", messages);
@@ -79,11 +128,9 @@ public class OpenAIHandler {
 
         HttpResponse<String> res = HTTP.send(req, HttpResponse.BodyHandlers.ofString());
 
-        AIChatbotClient.LOGGER.info("[AICHAT] API status: " + res.statusCode());
-
         if (res.statusCode() != 200) {
             AIChatbotClient.LOGGER.error("[AICHAT] API error: " + res.body());
-            return "API error " + res.statusCode();
+            return null;
         }
 
         JsonObject json = GSON.fromJson(res.body(), JsonObject.class);
@@ -99,7 +146,6 @@ public class OpenAIHandler {
         if (mc.player != null && mc.player.networkHandler != null) {
             mc.execute(() -> {
                 String toSend = msg.length() > 256 ? msg.substring(0, 253) + "..." : msg;
-                AIChatbotClient.LOGGER.info("[AICHAT] Sending: " + toSend);
                 mc.player.networkHandler.sendChatMessage(toSend);
             });
         }

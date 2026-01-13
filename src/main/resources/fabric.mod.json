@@ -3,14 +3,15 @@
     "id": "aichatbot",
     "version": "${version}",
     "name": "AI Chatbot",
-    "description": "Responds to !ai messages in chat using AI",
+    "description": "Responds to !ai messages in chat using AI - Unrestricted mode",
     "authors": ["qborder"],
     "contact": {},
     "license": "MIT",
     "icon": "assets/aichatbot/icon.png",
     "environment": "client",
     "entrypoints": {
-        "client": ["com.aichatbot.AIChatbotClient"]
+        "client": ["com.aichatbot.AIChatbotClient"],
+        "modmenu": ["com.aichatbot.ModMenuIntegration"]
     },
     "mixins": ["aichatbot.mixins.json"],
     "depends": {
@@ -18,5 +19,9 @@
         "minecraft": "~1.21.11",
         "java": ">=21",
         "fabric-api": "*"
+    },
+    "suggests": {
+        "cloth-config": "*",
+        "modmenu": "*"
     }
 }

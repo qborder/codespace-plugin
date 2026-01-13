@@ -89,7 +89,8 @@ public class OpenAIHandler {
                 contextBuilder.append("\nYour coordinates: X=").append(pos.getX())
                         .append(" Y=").append(pos.getY())
                         .append(" Z=").append(pos.getZ());
-                contextBuilder.append("\nDimension: ").append(player.getWorld().getRegistryKey().getValue().toString());
+                contextBuilder.append("\nDimension: ")
+                        .append(player.getEntityWorld().getRegistryKey().getValue().toString());
             }
 
             contextBuilder.append("\n--- END CONTEXT ---");

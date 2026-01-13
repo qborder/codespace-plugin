@@ -15,18 +15,16 @@ public class OpenAIHandler {
 
     private static long lastRequest = 0;
 
-    public static void handleMessage(String playerName, String message) {
-        if (!message.toLowerCase().startsWith(Config.prefix.toLowerCase())) {
-            return;
-        }
+    public static void handleMessage(String playerName, String query) {
+        AIChatbotClient.LOGGER.info("[AICHAT] Processing query from " + playerName + ": " + query);
 
         long now = System.currentTimeMillis();
         if (now - lastRequest < Config.cooldownMs) {
+            AIChatbotClient.LOGGER.info("[AICHAT] Cooldown active");
             return;
         }
         lastRequest = now;
 
-        String query = message.substring(Config.prefix.length()).trim();
         if (query.isEmpty()) {
             sendChat("Usage: " + Config.prefix + " <your question>");
             return;
@@ -34,58 +32,61 @@ public class OpenAIHandler {
 
         CompletableFuture.runAsync(() -> {
             try {
+                AIChatbotClient.LOGGER.info("[AICHAT] Calling API...");
                 String response = callAPI(playerName, query);
+                AIChatbotClient.LOGGER.info("[AICHAT] Got response: " + response);
                 if (response != null && !response.isEmpty()) {
                     sendChat(response);
                 }
             } catch (Exception e) {
-                AIChatbotClient.LOGGER.error("API request failed", e);
-                sendChat("Error: AI request failed");
+                AIChatbotClient.LOGGER.error("[AICHAT] API failed", e);
+                sendChat("Error: " + e.getMessage());
             }
         });
     }
 
     private static String callAPI(String playerName, String query) throws Exception {
-        JsonObject requestBody = new JsonObject();
-        requestBody.addProperty("provider", Config.provider);
-        requestBody.addProperty("model", Config.model);
-        requestBody.addProperty("stream", false);
-        requestBody.addProperty("temperature", 1);
-        requestBody.addProperty("top_p", 1);
-        requestBody.addProperty("max_tokens", Config.maxTokens);
-        requestBody.addProperty("presence_penalty", 0);
-        requestBody.addProperty("frequency_penalty", 0);
+        JsonObject body = new JsonObject();
+        body.addProperty("provider", Config.provider);
+        body.addProperty("model", Config.model);
+        body.addProperty("stream", false);
+        body.addProperty("temperature", 1);
+        body.addProperty("top_p", 1);
+        body.addProperty("max_tokens", Config.maxTokens);
+        body.addProperty("presence_penalty", 0);
+        body.addProperty("frequency_penalty", 0);
 
         JsonArray messages = new JsonArray();
 
-        JsonObject systemMsg = new JsonObject();
-        systemMsg.addProperty("role", "system");
-        systemMsg.addProperty("content", Config.systemPrompt);
-        messages.add(systemMsg);
+        JsonObject sys = new JsonObject();
+        sys.addProperty("role", "system");
+        sys.addProperty("content", Config.systemPrompt);
+        messages.add(sys);
 
-        JsonObject userMsg = new JsonObject();
-        userMsg.addProperty("role", "user");
-        userMsg.addProperty("content", playerName + " asks: " + query);
-        messages.add(userMsg);
+        JsonObject user = new JsonObject();
+        user.addProperty("role", "user");
+        user.addProperty("content", playerName + " asks: " + query);
+        messages.add(user);
 
-        requestBody.add("messages", messages);
+        body.add("messages", messages);
 
-        HttpRequest request = HttpRequest.newBuilder()
+        HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create(Config.apiUrl))
                 .header("Content-Type", "application/json")
                 .header("Authorization", "Bearer " + Config.apiKey)
-                .header("Accept", "*/*")
-                .POST(HttpRequest.BodyPublishers.ofString(GSON.toJson(requestBody)))
+                .POST(HttpRequest.BodyPublishers.ofString(GSON.toJson(body)))
                 .build();
 
-        HttpResponse<String> response = HTTP.send(request, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> res = HTTP.send(req, HttpResponse.BodyHandlers.ofString());
 
-        if (response.statusCode() != 200) {
-            AIChatbotClient.LOGGER.error("API error: " + response.body());
-            return "Error: API returned " + response.statusCode();
+        AIChatbotClient.LOGGER.info("[AICHAT] API status: " + res.statusCode());
+
+        if (res.statusCode() != 200) {
+            AIChatbotClient.LOGGER.error("[AICHAT] API error: " + res.body());
+            return "API error " + res.statusCode();
         }
 
-        JsonObject json = GSON.fromJson(response.body(), JsonObject.class);
+        JsonObject json = GSON.fromJson(res.body(), JsonObject.class);
         return json.getAsJsonArray("choices")
                 .get(0).getAsJsonObject()
                 .getAsJsonObject("message")
@@ -93,12 +94,13 @@ public class OpenAIHandler {
                 .trim();
     }
 
-    private static void sendChat(String message) {
-        MinecraftClient client = MinecraftClient.getInstance();
-        if (client.player != null && client.player.networkHandler != null) {
-            client.execute(() -> {
-                String toSend = message.length() > 256 ? message.substring(0, 253) + "..." : message;
-                client.player.networkHandler.sendChatMessage(toSend);
+    private static void sendChat(String msg) {
+        MinecraftClient mc = MinecraftClient.getInstance();
+        if (mc.player != null && mc.player.networkHandler != null) {
+            mc.execute(() -> {
+                String toSend = msg.length() > 256 ? msg.substring(0, 253) + "..." : msg;
+                AIChatbotClient.LOGGER.info("[AICHAT] Sending: " + toSend);
+                mc.player.networkHandler.sendChatMessage(toSend);
             });
         }
     }
